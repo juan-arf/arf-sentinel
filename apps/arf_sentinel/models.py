@@ -1,51 +1,417 @@
-from pydantic import BaseModel, Field
-from typing import Literal, Any, Optional
+"""
+Core domain models for ARF Sentinel – Autonomous Blast‑Radius Governance.
+
+These Pydantic models enforce the mathematical contract between CRAFT
+investigation, Nemotron reasoning, ARF Bayesian governance, and the
+execution boundary. Every field is documented with its role in the
+expected‑loss minimisation pipeline.
+
+Mathematical Foundation
+-----------------------
+ARF uses Bayesian Expected Loss Minimisation:
+
+    P(Risk | Evidence) ∝ P(Evidence | Risk) · P(Risk)
+
+    ExpectedLoss(a) = Σ_{outcomes} Loss(a, outcome) · P(outcome | Evidence)
+
+where a ∈ {APPROVE, DENY, ESCALATE}. ARF selects a* = argmin ExpectedLoss(a)
+unless a policy violation forces DENY.
+
+Blast‑radius score B ∈ [0,1] is normalised from dependency graph metrics:
+
+    B = 0.50·min(N_repos/200, 1) + 0.30·min(N_transitive/100, 1) + 0.20·min(N_paths/50, 1)
+
+Risk probability R ∈ [0.5, 1.0] is a conservative monotonic mapping:
+
+    R = 0.5 + 0.5·B
+
+Evidence confidence C ∈ [0,1] reflects data completeness and query success.
+"""
+
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal, Any, Optional, Union
 from datetime import datetime, timezone
+from enum import Enum
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Enums
+# ──────────────────────────────────────────────────────────────────────
+
+class GovernanceAction(str, Enum):
+    """Possible ARF governance decisions."""
+    APPROVE = "APPROVE"
+    DENY = "DENY"
+    ESCALATE = "ESCALATE"
+
+
+class ExecutionStatus(str, Enum):
+    """Execution boundary outcomes."""
+    AUTHORIZED_SIMULATION = "AUTHORIZED_SIMULATION"
+    BLOCKED_POLICY = "BLOCKED_POLICY"
+    BLOCKED_PENDING_HUMAN_APPROVAL = "BLOCKED_PENDING_HUMAN_APPROVAL"
+
+
+class AuditActor(str, Enum):
+    """Actors in the audit trail."""
+    USER = "USER"
+    INVESTIGATOR_AGENT = "INVESTIGATOR_AGENT"
+    CRAFT_MCP = "CRAFT_MCP"
+    NEMOTRON = "NEMOTRON"
+    ARF = "ARF"
+    EXECUTION_BOUNDARY = "EXECUTION_BOUNDARY"
+
+
+class AuditEventType(str, Enum):
+    """Event types for the audit log."""
+    INCIDENT_CREATED = "INCIDENT_CREATED"
+    SCHEMA_DISCOVERED = "SCHEMA_DISCOVERED"
+    QUERY_GENERATED = "QUERY_GENERATED"
+    QUERY_EXECUTED = "QUERY_EXECUTED"
+    EVIDENCE_COLLECTED = "EVIDENCE_COLLECTED"
+    ACTION_PROPOSED = "ACTION_PROPOSED"
+    GOVERNANCE_EVALUATED = "GOVERNANCE_EVALUATED"
+    EXECUTION_REQUESTED = "EXECUTION_REQUESTED"
+    EXECUTION_BLOCKED = "EXECUTION_BLOCKED"
+    EXECUTION_AUTHORIZED = "EXECUTION_AUTHORIZED"
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Bayesian Prior Configuration
+# ──────────────────────────────────────────────────────────────────────
+
+class BayesianPrior(BaseModel):
+    """
+    Prior parameters for the Bayesian risk update.
+
+    The prior encodes domain knowledge about software supply‑chain
+    vulnerability risk before observing CRAFT evidence.
+
+    Attributes:
+        alpha: pseudo‑count of prior "risky" observations (default 2).
+        beta: pseudo‑count of prior "safe" observations (default 2).
+        base_risk: historical vulnerability rate used as prior mean
+                   (default 0.5, i.e. uninformed prior).
+    """
+    alpha: float = Field(default=2.0, ge=0.1, description="Prior pseudo‑count (risky)")
+    beta: float = Field(default=2.0, ge=0.1, description="Prior pseudo‑count (safe)")
+    base_risk: float = Field(default=0.5, ge=0.0, le=1.0, description="Prior mean risk probability")
+
+    @field_validator("alpha", "beta")
+    @classmethod
+    def must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Prior counts must be positive")
+        return v
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Policy Rule
+# ──────────────────────────────────────────────────────────────────────
+
+class PolicyRule(BaseModel):
+    """
+    A single governance policy rule.
+
+    Rules are evaluated in order. If a condition is satisfied, the
+    specified action is forced, overriding the Bayesian decision.
+
+    Attributes:
+        condition: a human‑readable description of the trigger
+                   (e.g. "blast_radius_score > 0.6").
+        action: the forced governance action when the condition holds.
+        reason: explanation for audit purposes.
+    """
+    condition: str = Field(description="Trigger condition (e.g., 'blast_radius_score > 0.6')")
+    action: GovernanceAction = Field(description="Forced action")
+    reason: str = Field(default="", description="Human‑readable justification")
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Core Domain Models
+# ──────────────────────────────────────────────────────────────────────
 
 class RemediationProposal(BaseModel):
-    action_type: str = Field(description="e.g., upgrade, rollback, patch")
-    target_package: str
-    proposed_version: Optional[str] = None
-    affected_repository_count: int
-    rationale: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    execution_scope: str = Field(description="blast radius description")
+    """
+    Structured remediation proposal generated by Nemotron.
+
+    This is the agent's *recommendation* – it does **not** carry
+    execution authority. Authority is exclusively determined by ARF.
+
+    Mathematical context:
+        The proposal includes the agent's self‑assessed confidence
+        p_conf ∈ [0,1]. ARF treats this as a likelihood factor in
+        the Bayesian update, not as ground truth.
+
+    Attributes:
+        action_type: upgrade, rollback, patch, etc.
+        target_package: name of the vulnerable package.
+        proposed_version: suggested safe version (may be None).
+        affected_repository_count: number of repos in the blast radius.
+        rationale: human‑readable justification.
+        confidence: agent's self‑reported confidence [0, 1].
+        execution_scope: description of the proposed blast radius.
+    """
+    action_type: str = Field(
+        description="e.g., upgrade, rollback, patch",
+        min_length=1,
+        max_length=50
+    )
+    target_package: str = Field(
+        description="Vulnerable package name (e.g., 'urllib3')",
+        min_length=1
+    )
+    proposed_version: Optional[str] = Field(
+        default=None,
+        description="Target version for the remediation"
+    )
+    affected_repository_count: int = Field(
+        ge=0,
+        description="Number of repositories in the blast radius"
+    )
+    rationale: str = Field(
+        description="Human‑readable justification for the proposed action"
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Agent's self‑assessed confidence p_conf ∈ [0,1]"
+    )
+    execution_scope: str = Field(
+        description="Plain‑language description of the blast radius (e.g., 'All 147 repos')"
+    )
+
+    @field_validator("confidence")
+    @classmethod
+    def confidence_bounds(cls, v: float) -> float:
+        """Ensure confidence is strictly within [0, 1]."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("Confidence must be between 0.0 and 1.0")
+        return v
+
 
 class IncidentEvidence(BaseModel):
-    incident_id: str
-    package_name: str
-    vulnerability_description: str
-    affected_repositories: list[dict[str, Any]]
-    dependency_paths: list[dict[str, Any]]
-    direct_dependency_count: int
-    transitive_dependency_count: int
-    affected_repository_count: int
-    evidence_confidence: float = Field(ge=0.0, le=1.0)
-    blast_radius_score: float = Field(ge=0.0, le=1.0)
-    investigation_summary: str
+    """
+    Enterprise evidence bundle produced by the CRAFT investigation.
+
+    This structure carries the dependency graph metrics that feed into
+    blast‑radius normalisation and Bayesian risk updating.
+
+    Mathematical context:
+        - direct_dependency_count: D
+        - transitive_dependency_count: T
+        - affected_repository_count: N
+        - dependency_path_count: P
+        - blast_radius_score: B = f(D, T, P) ∈ [0, 1]
+        - evidence_confidence: C ∈ [0, 1]
+
+    The posterior risk is computed as:
+        R_post = 0.5 + 0.5·B  (conservative mapping)
+        updated via Bayesian prior to yield the final risk probability.
+
+    Attributes:
+        incident_id: unique identifier for the incident.
+        package_name: the vulnerable package.
+        vulnerability_description: CVE or plain‑language description.
+        affected_repositories: list of {repo, dependency} dicts.
+        dependency_paths: list of {from, to} dicts.
+        direct_dependency_count: D – repos that directly import the package.
+        transitive_dependency_count: T – repos that transitively depend.
+        affected_repository_count: N – total repos in the blast radius.
+        evidence_confidence: C – estimated reliability of the CRAFT data.
+        blast_radius_score: B – normalised impact score.
+        investigation_summary: human‑readable summary.
+    """
+    incident_id: str = Field(description="Unique incident identifier")
+    package_name: str = Field(description="Vulnerable package name")
+    vulnerability_description: str = Field(description="CVE or plain‑language description")
+    affected_repositories: list[dict[str, Any]] = Field(
+        description="List of {repo, dependency} objects"
+    )
+    dependency_paths: list[dict[str, Any]] = Field(
+        description="List of {from, to} dependency edges"
+    )
+    direct_dependency_count: int = Field(ge=0, description="Direct dependency count (D)")
+    transitive_dependency_count: int = Field(ge=0, description="Transitive dependency count (T)")
+    affected_repository_count: int = Field(ge=0, description="Total repos affected (N)")
+    evidence_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Estimated reliability C ∈ [0,1] of the CRAFT data"
+    )
+    blast_radius_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Normalised blast‑radius score B ∈ [0,1]"
+    )
+    investigation_summary: str = Field(description="Human‑readable investigation summary")
+
+    @field_validator("evidence_confidence", "blast_radius_score")
+    @classmethod
+    def score_bounds(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("Scores must be in [0, 1]")
+        return v
+
 
 class GovernanceDecision(BaseModel):
-    decision: Literal["APPROVE", "DENY", "ESCALATE"]
-    risk_probability: float = Field(ge=0.0, le=1.0)
-    blast_radius_score: float = Field(ge=0.0, le=1.0)
-    evidence_confidence: float = Field(ge=0.0, le=1.0)
-    expected_loss_approve: float
-    expected_loss_deny: float
-    expected_loss_escalate: float
-    policy_violations: list[str] = []
-    reason: str
-    requires_human_approval: bool
+    """
+    Final governance decision returned by the ARF RiskEngine.
+
+    This is the *binding* decision that the ExecutionBoundary enforces.
+
+    Mathematical context:
+        The decision d ∈ {APPROVE, DENY, ESCALATE} minimises:
+            d* = argmin ExpectedLoss(a)
+        where:
+            ExpectedLoss(APPROVE)  = R · cost(B)
+            ExpectedLoss(DENY)     = (1−R) · C · cost_deny
+            ExpectedLoss(ESCALATE) = policy_weight · (R · cost(B) + cost_escalate)
+
+        If any policy rule triggers, the decision is overridden.
+
+    Attributes:
+        decision: APPROVE, DENY, or ESCALATE.
+        risk_probability: posterior risk R ∈ [0, 1].
+        blast_radius_score: normalised blast radius B ∈ [0, 1].
+        evidence_confidence: evidence reliability C ∈ [0, 1].
+        expected_loss_approve: L_approve.
+        expected_loss_deny: L_deny.
+        expected_loss_escalate: L_escalate.
+        policy_violations: list of triggered policy conditions.
+        reason: human‑readable explanation.
+        requires_human_approval: True if DENY or ESCALATE.
+        prior: the Bayesian prior used in this evaluation.
+        likelihood_ratio: evidence multiplier P(E|R)/P(E).
+    """
+    decision: GovernanceAction = Field(description="Binding governance decision")
+    risk_probability: float = Field(ge=0.0, le=1.0, description="Posterior risk R ∈ [0,1]")
+    blast_radius_score: float = Field(ge=0.0, le=1.0, description="Normalised blast radius B ∈ [0,1]")
+    evidence_confidence: float = Field(ge=0.0, le=1.0, description="Evidence reliability C ∈ [0,1]")
+    expected_loss_approve: float = Field(description="Expected loss if APPROVE is chosen")
+    expected_loss_deny: float = Field(description="Expected loss if DENY is chosen")
+    expected_loss_escalate: float = Field(description="Expected loss if ESCALATE is chosen")
+    policy_violations: list[str] = Field(default_factory=list, description="Triggered policy conditions")
+    reason: str = Field(description="Human‑readable explanation of the decision")
+    requires_human_approval: bool = Field(description="True if execution is blocked")
+    prior: Optional[BayesianPrior] = Field(default=None, description="Bayesian prior used")
+    likelihood_ratio: Optional[float] = Field(default=None, ge=0.0, description="Evidence multiplier")
+
+    @field_validator("risk_probability", "blast_radius_score", "evidence_confidence")
+    @classmethod
+    def probability_bounds(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("Probabilities and scores must be in [0, 1]")
+        return v
+
 
 class ExecutionResult(BaseModel):
-    status: Literal["AUTHORIZED_SIMULATION", "BLOCKED_POLICY", "BLOCKED_PENDING_HUMAN_APPROVAL"]
-    governance_decision: GovernanceDecision
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    """
+    Result of attempting to execute a remediation action through
+    the ExecutionBoundary.
+
+    The boundary independently inspects the GovernanceDecision and
+    enforces it – the UI cannot bypass this gate.
+
+    Attributes:
+        status: AUTHORIZED_SIMULATION, BLOCKED_POLICY, or
+                BLOCKED_PENDING_HUMAN_APPROVAL.
+        governance_decision: the decision that was enforced.
+        timestamp: UTC timestamp of the execution attempt.
+        message: human‑readable status message.
+    """
+    status: ExecutionStatus = Field(description="Execution boundary outcome")
+    governance_decision: GovernanceDecision = Field(description="The enforced decision")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC timestamp of execution attempt"
+    )
+    message: str = Field(default="", description="Human‑readable status message")
+
+    @field_validator("status")
+    @classmethod
+    def validate_status_consistency(cls, v: ExecutionStatus, info: Any) -> ExecutionStatus:
+        """Ensure status matches the governance decision."""
+        decision = info.data.get("governance_decision")
+        if decision is not None:
+            if v == ExecutionStatus.AUTHORIZED_SIMULATION and decision.decision != GovernanceAction.APPROVE:
+                raise ValueError("Only APPROVE decisions can yield AUTHORIZED_SIMULATION")
+            if v == ExecutionStatus.BLOCKED_POLICY and decision.decision != GovernanceAction.DENY:
+                raise ValueError("Only DENY decisions can yield BLOCKED_POLICY")
+        return v
+
+
+class CounterfactualResult(BaseModel):
+    """
+    Result of a counterfactual scope‑reduction analysis.
+
+    When ARF escalates or denies, the counterfactual engine finds the
+    largest safe scope by iteratively reducing the blast radius until
+    the expected loss of APPROVE falls below the ESCALATE threshold.
+
+    Mathematical context:
+        Given original scope N₀ with blast radius B₀, we find N_safe
+        such that:
+            B(N_safe) ≤ threshold (default 0.6)
+        and re‑evaluate ARF with the reduced evidence.
+
+    Attributes:
+        original_repo_count: N₀ – the initial scope.
+        safe_repo_count: N_safe – the reduced scope.
+        original_blast_radius: B₀.
+        safe_blast_radius: B_safe.
+        original_risk: R₀.
+        safe_risk: R_safe.
+        risk_reduction_pct: percentage reduction in risk.
+        safe_proposal: the re‑scoped RemediationProposal.
+        safe_decision: ARF's decision on the safe scope.
+    """
+    original_repo_count: int = Field(description="Original number of repos (N₀)")
+    safe_repo_count: int = Field(description="Safe number of repos (N_safe)")
+    original_blast_radius: float = Field(ge=0.0, le=1.0, description="Original blast radius B₀")
+    safe_blast_radius: float = Field(ge=0.0, le=1.0, description="Safe blast radius B_safe")
+    original_risk: float = Field(ge=0.0, le=1.0, description="Original risk probability R₀")
+    safe_risk: float = Field(ge=0.0, le=1.0, description="Safe risk probability R_safe")
+    risk_reduction_pct: float = Field(description="Percentage risk reduction")
+    safe_proposal: RemediationProposal = Field(description="Re‑scoped proposal")
+    safe_decision: GovernanceDecision = Field(description="ARF decision on safe scope")
+
+    @field_validator("risk_reduction_pct")
+    @classmethod
+    def valid_reduction(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Risk reduction must be non‑negative")
+        return v
+
 
 class AuditRecord(BaseModel):
-    timestamp: str
-    incident_id: str
-    event_type: str
-    actor: str
-    action: str
-    decision: Optional[str] = None
-    metadata: dict[str, Any] = {}
+    """
+    A single entry in the JSON Lines audit log.
+
+    Every action in the pipeline – from incident creation to execution –
+    is recorded as an AuditRecord. The audit log provides cryptographic‑
+    grade traceability (when combined with external signing).
+
+    Attributes:
+        timestamp: ISO‑8601 UTC timestamp.
+        incident_id: links to the parent incident.
+        event_type: from AuditEventType enum.
+        actor: which component performed the action.
+        action: what was done.
+        decision: the governance decision, if any.
+        metadata: arbitrary key‑value context (sanitised before storage).
+    """
+    timestamp: str = Field(description="ISO‑8601 UTC timestamp")
+    incident_id: str = Field(description="Parent incident identifier")
+    event_type: Union[AuditEventType, str] = Field(description="Type of event")
+    actor: Union[AuditActor, str] = Field(description="Component that performed the action")
+    action: str = Field(description="Description of the action")
+    decision: Optional[GovernanceAction] = Field(default=None, description="Governance decision, if applicable")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Contextual key‑value data")
+
+    @field_validator("metadata")
+    @classmethod
+    def sanitize_secrets(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Remove sensitive keys before logging."""
+        sensitive = {"api_key", "authorization", "token", "refresh_token", "access_token", "bearer"}
+        return {k: val for k, val in v.items() if not any(s in k.lower() for s in sensitive)}
