@@ -259,9 +259,8 @@ elif st.session_state.phase == 1:
     progress_bar.empty()
     status_text.empty()
 
-    # Ensure state exists (auto‑play may have skipped manual init)
+    # SAFETY GUARD: auto‑play may reach this phase without manual init
     if st.session_state.state is None:
-        # Create a minimal state with the mock investigation data
         st.session_state.state = SentinelState(
             incident_id=f"incident_{int(time.time())}",
             package_name="urllib3",
