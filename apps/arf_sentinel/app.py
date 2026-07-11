@@ -386,8 +386,8 @@ elif st.session_state.phase == 3:
 
     col1, col2 = st.columns(2)
     col1.metric("Agent Confidence", f"{proposal.confidence:.0%}")
-    col2.metric("ARF Posterior Risk", f"{decision.risk_probability:.0%}", delta="+32%", delta_color="inverse")
-    st.caption("*Confidence does not equal execution safety.*")
+    col2.metric("ARF Posterior Risk", f"{decision.risk_probability:.0%}", delta=f"+{((decision.risk_probability - 0.5) * 100):.0f}%", delta_color="inverse")
+    st.caption("*Bayesian update: prior 50% → posterior " + f"{decision.risk_probability:.0%}" + " based on blast‑radius evidence. Confidence alone is not safety.*")
 
     if st.button("VIEW BAYESIAN ANALYSIS -->"):
         next_phase()
