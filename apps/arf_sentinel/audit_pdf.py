@@ -193,7 +193,7 @@ def generate_audit_pdf(
         "Enterprise AI needs an execution control plane. "
         "ARF Sentinel finds the maximum safe action an agent can take, "
         "ensuring that AI proposals are independently governed before "
-        "they become real‑world changes."
+        "they become real-world changes."
     )
 
     return pdf.output()
