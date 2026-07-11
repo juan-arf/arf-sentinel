@@ -1,214 +1,84 @@
-# ARF Sentinel — Autonomous Blast-Radius Governance for Enterprise AI Agents
+# ARF Sentinel
 
 **The execution control plane for enterprise AI agents.**
 
-> *Your agent proposes. ARF decides. The agent cannot grant itself authority.*
+> *Agents propose. ARF decides. The agent cannot grant itself authority.*
 
 ---
 
-## ߟ�️ The Problem
+## The Problem
 
-Enterprise agents increasingly have access to internal databases, operational systems, and APIs. Frameworks like LangGraph, CrewAI, and AutoGen excel at reasoning, planning, and tool selection.
+An agent identifies a critical CVE in `urllib3` affecting 147 repos and recommends an immediate upgrade. Technically correct — operationally dangerous.
 
-But **who guards the guard?**
-
-An agent can produce a logically valid recommendation that is operationally dangerous. Example:
-
-> *A critical CVE is found in `urllib3`. The agent correctly identifies 147 affected repositories and recommends an immediate upgrade across all of them.*
->
-* The recommendation is technically correct. Immediate autonomous execution would create an unacceptable blast radius.
-
-**ARF Sentinel closes this gap** by inserting an independent, Bayesian governance layer between the agent's proposal and execution.
+**Who guards the guard?**
 
 ---
 
-## 🞨️ Solution
+## The Solution
 
-ARF Sentinel combines three enterprise-grade systems into a single governance control plane:
-
-| Component | Role | Technology |
-|----------|------|------------|
-| **CRAFT** | Enterprise data investigation | MCP server over Snowflake / Spider2 |
-| **Nemotron** | Agent reasoning and remediation planning | Nebius Token Factory (nvidia/nemotron-3-super-120b-a12b) |
-| **ARF** | Independent governance and execution authority | Bayesian Expected Loss Minimisation, policy engine |
-
-The agent **proposes**; ARF **decides** (APPROVE / DENY / ESCALATE) based on:
-
-- Blast radius (repositories, dependency paths)
-- Evidence confidence
-- Policy constraints
-- Expected loss of each decision
-
-If the action is too risky, ARF doesn't just block — it computes a **counterfactual safe scope** and guides the agent toward a bounded, lower–loss action.
-
----
-
-## 🎥 Walkthrough (Cinematic Auto”play)
-
-The Streamlit demo follows a guided, 8―phase narrative with optional auto”advance every 5 seconds.
-
-#### Phase 0 — Mission Control
-Animated workflow diagram: CRAFT x�� Nemotron ↔ ARF ↔ Execution.  
-Hero numbers: 147 repos exposed, 92% agent confidence, 63% blast radius.
-
-#### Phase 1 — CRAFT Investigation
-Live scanning progress bar. Discovers 89 direct, 58 transitive dependencies, 23 dependency paths.
-
-#### Phase 2 — Nemotron Proposal
-Agent proposes upgrading `urllib3` to `2.0.1` across all 147 repos with 92% confidence.  
-*"Agent recommendation — not execution authorization."*
-
-#### Phase 3 — ARF Governance Interception
-Confidence vs. Risk animated battle bar. ARF risk posterior (82%) overtakes agent confidence.  
-ARF GATE blocks the execution request.
-
-#### Phase 4 — Bayesian Decision Engine
-- Full Bayesian formula rendered via LaTeX:
-  $$P(Risk|Evidence) = \frac{P(Evidence|Risk) \cdot P(Risk)}{P(Evidence)}$$
-- Prior risk (50%), evidence strength, likelihood ratio.
-- Expected loss bar chart: APPROVE (0.71), DENY (0.64), **ESCALATE (0.19)** ← minimum.
-- Decision: **ESCALATE**— blast radius exceeds autonomous threshold.
-
-#### Phase 5 — Execution Boundary
-Hard block: "BLOCKED BY ARF — Human approval required."  
-*The agent proposed the action. The agent did not authorize it.*
-
-#### Phase 6 — Counterfactual Analysis
-ARF finds a safer scope: **32 repos** instead of 147.  
-- Blast radius drops from 63% ↔ 41%  
-- Risk drops from 82% x�� 37%  
-- Expected loss reduced by 73%  
-Bayesian update recalculated, ARF now **APPROVES**` a canary deployment.
-
-#### Phase 7 — Agent Re”planning
-Nemotron receives ARF’s bounded scope and adjusts the proposal.  
-Canary upgrade of 32 repos with continuous monitoring.
-
-#### Phase 8 — Approval & GTM
-ARF DECISION: **APPROVE**  
-Downloadable PDF audit trail.  
-Final message: *"Enterprise AI needs an execution control plane."*
-
----
-
-## 🤜 Bayesian Methodology
-
-ARF uses Bayesian Expected Loss Minimisation, not deterministic thresholds.
-
-**Risk Probability** is computed via a monotonic mapping of blast radius:
-````
-risk_prob = 0.5 + 0.5 × blast_radius_score
-````
-
-**Expected Loss** for each action is calculated as:
-- **APPROVE**: `risk_prob × cost(blast_radius)`
-- **DENY**: `(1 - risk_prob) × evidence_confidence × cost_of_denial`
-- **ESCALATE**: policy′weighted penalty (lower for controllable risk)
-
-ARF selects the action with **minimum expected loss**, unless a policy violation forces DENY.
-
----
-
-## 🔄 Counterfactual Engine
-
-When ARF escalates or denies, the counterfactual module (`counterfactual.py`) reduces the scope proportionally until the blast radius falls below the policy threshold (default 0.6). The safe scope is then re—evaluated by ARF, which typically returns **APPROVE**, demonstrating that ARF isn’t a blocker — it’s a **safe–action optimizer**.
-
----
-
-## 📦 Tech Stack
-
-| Layer | Technology |
-|------|-----------|
-| Frontend | Streamlit (dark cyberpunk theme, responsive) |
-| Orchestration | LangGraph (typed state machine, mandatory ARF node) |
-| LLM Inference | Nebius Token Factory (Nemotron 120B) |
-| Enterprise Data | CRAFT MCP (schema discovery, SQL generation, query execution) |
-| Governance | ARF RiskEngine (Bayesian, policy engine) |
-| Visualization | Plotly (risk comparison, expected loss, treemap) |
-| Audit | `fpdf2` PDF generation + JSON Lines audit log |
-
----
-
-## 🧪 Tests
+Three systems, one governance plane:
 
 ```bash
-pytest apps/arf_sentinel/tests/ -q
-````
+CRAFT (cyan) → NEMOTRON (violet) → ARF (green) → EXECUTION (red)
+Discover Reason Authorize Enforce
+```
 
-9 tests covering:
-- Blast‒radius normalization (range, monotonicity)
-- ARF adapter decision validity (APPROVE/DENY/ESCALATE)
-- Execution boundary (ESCALATE cannot execute, DENY cannot execute, APPROVE simulates)
-- Graph structure (mandatory ARF node, no bypass)
-- Audit log sanitization (no API keys, tokens, or auth headers)
 
----
+| System | Role |
+|--------|------|
+| **CRAFT** | Enterprise dependency investigation |
+| **Nemotron** | Agent reasoning & remediation planning |
+| **ARF** | Independent Bayesian governance |
 
-## 🚀 Quick Start
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/juan-arf/arf-sentinel.git
-   cd arf-sentinel
-   ````
-
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set environment variables**
-   Copy `.env.template` to `.env` and fill in:
-   - `MCP_URL`
-   - `PROJECT_ID`
-   - `NEBIUS_API_KEY`
-   - `NEBIUS_BASE_URL`
-   - `NEBIUS_MODEL`
-
-4. **Run the demo**
-   ```bash
-   streamlit run apps/arf_sentinel/app.py
-   ```
-   Then check the sidebar for "Auto”play" mode.
+ARF evaluates **blast radius**, **evidence confidence**, and **policy constraints**, then decides: **APPROVE**, **DENY**, or **ESCALATE**.
 
 ---
 
-## 📊 Environment Variables
+## Demo Flow (auto‑playing)
 
-| Variable | Purpose | Default |
-|----------|--------|--------|
-| `MCP_URL` | CRAFT MCP server URL | *(required)* |
-| `PROJECT_ID` | CRAFT project identifier | *(required)* |
-| `NEBIUS_API_KEY` | Nebius Token Factory API key | *(required)* |
-| `NEBIUS_BASE_URL` | Nebius base endpoint | `https://api.nebius.com/v1` |
-| `NEBIUS_MODEL` | Model to use | `nvidia/nemotron-3-super-120b-a12b` |
-| `SENTINEL_DEMO_MODE` | Use pre’captured fixture data | `false` |
+| Phase | What happens |
+|-------|-------------|
+| 0 | Animated workflow. 147 repos, 63% blast radius |
+| 1 | Live scanning bar: 89 direct, 58 transitive deps |
+| 2 | Agent proposes upgrade with 92% confidence |
+| 3 | Battle bar: ARF risk (82%) overtakes confidence |
+| 4 | Bayesian formula. Expected loss chart. **ESCALATE** |
+| 5 | Hard block: "Agent execution authority denied" |
+| 6 | Counterfactual: 147→32 repos. Risk drops to 37% |
+| 7 | Agent replans the canary upgrade |
+| 8 | ARF **APPROVES**. Download audit PDF |
 
 ---
 
-## 📄 Download as Word Document
+## Bayesian Governance
 
-If you have `pandoc` installed, generate a polished `.docx` file:
+$$R = 0.5 + 0.5 \cdot B \qquad P(R|E) = \frac{P(E|R) \cdot P(R)}{P(E)}$$
+
+ARF picks the action with **minimum expected loss**.
+
+---
+
+## Counterfactual Engine
+
+When ARF escalates, it doesn't just block — it computes the **maximum safe scope** and guides the agent toward an approvable plan.
+
+---
+
+## Tech Stack
+
+`Streamlit` `LangGraph` `Nebius Nemotron` `CRAFT MCP` `Plotly` `Pydantic` `fpdf2` `pytest`
+
+---
+
+## Quick Start
 
 ```bash
-pandoc README.md -o ARF_Sentinel_Docs.docx
-````
+git clone https://github.com/juan-arf/arf-sentinel.git
+cd arf-sentinel
+pip install -r requirements.txt
+streamlit run apps/arf_sentinel/app.py
+```
 
----
+> _"What happens when the agent is right, but the action is too dangerous? ARF finds the maximum safe action an agent can take."_
 
-## 🏆 Acknowledgments
-
-- Juan David Campolargo - Lead Engineer & Product
-- ARF Core - Governance framework & Bayesian engine
-- CRAFT - Enterprise MCP integration
-- Nebius - LLM inference & GPU resources
-
----
-
-## 💱 GTM Messaging
-
-> *Everyone is building agents that reason over enterprise data. We asked a different question: what happens when the agent is right, but the action is too dangerous to execute? ARF Sentinel is the execution control plane that finds the maximum safe action an agent can take.*
-
----
-
-*Built for the Enterprise Agents Hackathon by Emergence AI & Nebius.*
+_Built for the Enterprise Agents Hackathon by Emergence AI & Nebius._
