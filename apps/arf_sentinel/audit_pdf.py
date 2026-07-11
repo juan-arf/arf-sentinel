@@ -1,25 +1,3 @@
-"""
-Audit PDF Generator – formal, self-contained documentation of the
-entire ARF Sentinel governance process.
-
-Produces a multi‑page PDF report containing:
-
-    * Cover page with ARF Sentinel logo/title
-    * Incident summary
-    * CRAFT investigation evidence
-    * Nemotron agent proposal
-    * ARF Bayesian governance decision (expected losses, policy violations)
-    * Execution boundary result (if any)
-    * Footer with generation timestamp
-
-The output is a bytes object suitable for download or storage. It uses
-the `fpdf2` library for layout and styling.
-
-Note: All text is ASCII‑safe to guarantee portability. The report is
-designed for archival and audit purposes – it provides a human‑readable
-record of why an AI agent was or was not allowed to act.
-"""
-
 from fpdf import FPDF
 from datetime import datetime, timezone
 from typing import Optional
@@ -37,16 +15,13 @@ class AuditPDF(FPDF):
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=20)
-        # Use built‑in Helvetica (ASCII safe)
         self.set_font("Helvetica", size=12)
 
     def header(self):
-        """Page header with ARF Sentinel branding."""
         if self.page_no() == 1:
-            # Title page – no header
             return
         self.set_font("Helvetica", "B", 10)
-        self.set_text_color(0, 200, 0)  # ARF green
+        self.set_text_color(0, 200, 0)
         self.cell(0, 8, "ARF SENTINEL - AUDIT TRAIL", align="L")
         self.ln(8)
         self.set_draw_color(0, 200, 0)
@@ -54,7 +29,6 @@ class AuditPDF(FPDF):
         self.ln(4)
 
     def footer(self):
-        """Page footer with timestamp."""
         if self.page_no() == 1:
             return
         self.set_y(-20)
@@ -62,9 +36,7 @@ class AuditPDF(FPDF):
         self.set_text_color(128, 128, 128)
         self.cell(0, 8, f"Generated: {datetime.now(timezone.utc).isoformat()} UTC", align="C")
 
-    # ── Helper: section title ──
     def section_title(self, title: str):
-        """Print a styled section title."""
         self.ln(4)
         self.set_font("Helvetica", "B", 13)
         self.set_text_color(0, 200, 0)
@@ -74,17 +46,22 @@ class AuditPDF(FPDF):
         self.ln(4)
         self.set_text_color(50, 50, 50)
 
-    # ── Helper: key‑value line ──
     def kv(self, key: str, value: str):
-        """Print a key: value line with bold key."""
+        """Print a key: value line, handling long values safely."""
         self.set_font("Helvetica", "B", 10)
-        self.cell(60, 7, key + ":")
+        key_width = 60
+        self.cell(key_width, 7, key + ":")
         self.set_font("Helvetica", "", 10)
-        self.multi_cell(0, 7, value)
+        # Calculate available width for the value
+        available_width = self.w - self.get_x() - self.r_margin
+        if available_width < 20:
+            # Not enough room: move to next line
+            self.ln()
+            self.set_x(self.l_margin + key_width)
+            available_width = self.w - self.l_margin - key_width - self.r_margin
+        self.multi_cell(available_width, 7, value)
 
-    # ── Helper: metric table (simple two‑column) ──
     def metric_table(self, rows: list[tuple[str, str]]):
-        """Print a table of metrics."""
         self.set_font("Helvetica", "B", 10)
         col_width = (self.w - self.l_margin - self.r_margin) / 2
         for key, val in rows:
@@ -98,28 +75,9 @@ def generate_audit_pdf(
     decision: GovernanceDecision,
     execution: Optional[ExecutionResult] = None,
 ) -> bytes:
-    """
-    Generate a complete audit trail PDF for a single incident.
-
-    Parameters
-    ----------
-    evidence : IncidentEvidence
-        CRAFT investigation evidence.
-    proposal : RemediationProposal
-        Agent's proposed remediation.
-    decision : GovernanceDecision
-        ARF governance decision.
-    execution : ExecutionResult, optional
-        Outcome of the execution boundary check.
-
-    Returns
-    -------
-    bytes
-        PDF file content.
-    """
     pdf = AuditPDF()
 
-    # ── Cover Page ──
+    # Cover Page
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(0, 200, 0)
@@ -145,7 +103,7 @@ def generate_audit_pdf(
     pdf.set_text_color(128, 128, 128)
     pdf.cell(0, 8, f"Generated: {datetime.now(timezone.utc).isoformat()} UTC", ln=True, align="C")
 
-    # ── Section 1: CRAFT Investigation Evidence ──
+    # Section 1: CRAFT Investigation Evidence
     pdf.add_page()
     pdf.section_title("1. CRAFT Investigation Evidence")
     pdf.metric_table([
@@ -168,7 +126,7 @@ def generate_audit_pdf(
         "success, and data completeness."
     )
 
-    # ── Section 2: Agent Proposal (Nemotron) ──
+    # Section 2: Agent Proposal (Nemotron)
     pdf.section_title("2. Remediation Proposal (Nemotron)")
     pdf.kv("Action", f"{proposal.action_type} {proposal.target_package} "
                      f"to {proposal.proposed_version}")
@@ -180,7 +138,7 @@ def generate_audit_pdf(
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 7, "This proposal was generated by the agent. It does NOT carry execution authority.", ln=True)
 
-    # ── Section 3: ARF Governance Decision ──
+    # Section 3: ARF Governance Decision
     pdf.section_title("3. ARF Governance Decision")
     pdf.kv("Decision", decision.decision)
     pdf.kv("Risk probability", f"{decision.risk_probability:.2f}")
@@ -199,7 +157,6 @@ def generate_audit_pdf(
     pdf.kv("Reason", decision.reason)
     pdf.kv("Requires human approval", str(decision.requires_human_approval))
 
-    # Bayesian methodology note
     pdf.ln(5)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(100, 100, 100)
@@ -211,7 +168,7 @@ def generate_audit_pdf(
         "Policy rules may override the mathematical minimum."
     )
 
-    # ── Section 4: Execution Boundary Result ──
+    # Section 4: Execution Boundary Result
     if execution:
         pdf.section_title("4. Execution Boundary Result")
         pdf.kv("Status", execution.status)
@@ -228,7 +185,7 @@ def generate_audit_pdf(
             pdf.cell(0, 10, "EXECUTION AUTHORIZED (SIMULATED)", ln=True, align="C")
         pdf.set_text_color(50, 50, 50)
 
-    # ── Final GTM statement ──
+    # Final GTM statement
     pdf.ln(10)
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(80, 80, 80)
@@ -239,5 +196,4 @@ def generate_audit_pdf(
         "they become real‑world changes."
     )
 
-    # Output PDF as bytes
-    return pdf.output()  # returns bytes in fpdf2
+    return pdf.output()
