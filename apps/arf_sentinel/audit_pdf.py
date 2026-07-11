@@ -8,14 +8,17 @@ from .models import (
     ExecutionResult,
 )
 
-
 class AuditPDF(FPDF):
-    """Custom PDF class with consistent styling for ARF Sentinel reports."""
+    """Custom PDF class with wider margins to prevent text clipping."""
 
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=20)
         self.set_font("Helvetica", size=12)
+        # Wider margins to avoid left-side clipping
+        self.set_left_margin(30)
+        self.set_right_margin(25)
+        self.set_top_margin(25)
 
     def header(self):
         if self.page_no() == 1:
@@ -47,23 +50,30 @@ class AuditPDF(FPDF):
         self.set_text_color(50, 50, 50)
 
     def kv(self, key: str, value: str):
-        """Print a key: value line, handling long values safely."""
+        """
+        Print a key: value line. If the value is too long to fit beside the key,
+        it continues on the next line, indented.
+        """
         self.set_font("Helvetica", "B", 10)
-        key_width = 60
-        self.cell(key_width, 7, key + ":")
-        self.set_font("Helvetica", "", 10)
-        # Calculate available width for the value
-        available_width = self.w - self.get_x() - self.r_margin
-        if available_width < 20:
-            # Not enough room: move to next line
-            self.ln()
-            self.set_x(self.l_margin + key_width)
-            available_width = self.w - self.l_margin - key_width - self.r_margin
-        self.multi_cell(available_width, 7, value)
+        key_width = 50  # reduced to leave more room for values
+        available = self.w - self.l_margin - self.r_margin
+
+        # Check if key + at least 20 chars of value can fit on one line
+        if key_width + 40 > available:
+            # Not enough room – print key on its own line, then value indented
+            self.cell(0, 7, key + ":", ln=True)
+            self.set_x(self.l_margin + 10)
+            self.set_font("Helvetica", "", 10)
+            self.multi_cell(available - 10, 7, value)
+        else:
+            self.cell(key_width, 7, key + ":")
+            self.set_font("Helvetica", "", 10)
+            self.multi_cell(available - key_width, 7, value)
 
     def metric_table(self, rows: list[tuple[str, str]]):
         self.set_font("Helvetica", "B", 10)
-        col_width = (self.w - self.l_margin - self.r_margin) / 2
+        usable = self.w - self.l_margin - self.r_margin
+        col_width = usable / 2
         for key, val in rows:
             self.cell(col_width, 7, key + ":")
             self.cell(col_width, 7, val, ln=True)
