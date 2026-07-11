@@ -233,3 +233,12 @@ def blast_radius_treemap(affected: int, direct: int, transitive: int) -> go.Figu
         margin=dict(t=60, l=20, r=20, b=20),
     )
     return fig
+
+def risk_comparison_chart(agent_confidence, arf_posterior_risk):
+    import plotly.graph_objects as go
+    fig = go.Figure(data=[
+        go.Bar(name='Agent Confidence', x=['Confidence / Risk'], y=[agent_confidence], marker_color='#2E86AB'),
+        go.Bar(name='ARF Posterior Risk', x=['Confidence / Risk'], y=[arf_posterior_risk], marker_color='#A23B72')
+    ])
+    fig.update_layout(title='Agent Confidence vs ARF Risk Assessment', yaxis_title='Probability', template='plotly_white')
+    return fig
