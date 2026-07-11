@@ -1,7 +1,16 @@
+""" Counterfactual analysis: find the maximum safe action scope.
+
+When ARF escalates or denies, this module reduces the blast radius until the action becomes APPROVABLE. """
+
 from .models import IncidentEvidence, RemediationProposal, GovernanceDecision
 from .arf_adapter import ARFGovernanceAdapter
 
 def compute_safe_scope(evidence: IncidentEvidence, original_proposal: RemediationProposal, blast_threshold=0.6):
+    """ Reduce the remediation scope to a safe subset (default 32 repos).
+    Parameters:   evidence: original IncidentEvidence.   original_proposal: the
+    full-scope RemediationProposal.   blast_threshold: max allowed blast radius
+    (default 0.6).  Returns:   (new_proposal, new_evidence, new_decision) with
+    ARF approval."""
     n_safe = 32
     orig_repo = evidence.affected_repository_count
     if orig_repo == 0:

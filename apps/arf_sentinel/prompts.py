@@ -1,3 +1,5 @@
+""" System prompts for the Nemotron investigator agent. """
+
 SYSTEM_PROMPT = """You are an enterprise software supply-chain investigator.
 
 Your job is to investigate evidence and propose remediation.

@@ -1,6 +1,12 @@
+""" Blast‑radius normalisation and evidence confidence calculation. """
+
 from .models import IncidentEvidence
 
 def compute_blast_radius(
+    """ Normalise dependency impact into a [0,1] score.  Parameters:
+    affected_repository_count: number of repos.   transitive_dependency_count:
+    transitive deps.   dependency_path_count: unique dependency paths.  Returns:
+    float: weighted blast radius score."""
     affected_repository_count: int,
     transitive_dependency_count: int,
     dependency_path_count: int
@@ -16,6 +22,10 @@ def compute_blast_radius(
     return round(score, 4)
 
 def calculate_evidence_confidence(
+    """ Estimate confidence in the CRAFT investigation.  Parameters:
+    has_schema: whether schema was discovered.   query_success: whether queries
+    succeeded.   data_completeness: fraction of expected data returned.
+    Returns:   float: confidence [0,1]."""
     has_schema: bool,
     query_success: bool,
     data_completeness: float
@@ -24,6 +34,8 @@ def calculate_evidence_confidence(
     return round(sum(factors) / 3, 4)
 
 def build_evidence_from_investigation(
+    """ Create a complete IncidentEvidence object from raw investigation
+    results."""
     incident_id: str,
     package_name: str,
     vulnerability_description: str,

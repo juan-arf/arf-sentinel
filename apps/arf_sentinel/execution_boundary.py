@@ -1,6 +1,12 @@
+""" Hard execution boundary that enforces ARF governance decisions.
+
+The boundary independently validates the decision and cannot be bypassed by the UI. """
+
 from .models import RemediationProposal, GovernanceDecision, ExecutionResult
 
 class ExecutionBoundary:
+    """ Enforces ARF decisions.  APPROVE -> simulated execution DENY -> blocked
+    (policy) ESCALATE -> blocked (pending human approval)"""
     """Independently enforces ARF governance decisions."""
 
     def execute(

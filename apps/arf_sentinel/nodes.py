@@ -1,3 +1,5 @@
+""" LangGraph nodes implementing the investigation -> proposal -> ARF governance -> execution boundary pipeline. """
+
 import sys, os, time, asyncio
 from .models import RemediationProposal, IncidentEvidence, GovernanceDecision
 from .evidence import build_evidence_from_investigation
@@ -7,6 +9,7 @@ from .audit import AuditLogger, timestamp
 from .state import SentinelState
 
 def discover_schema_node(state: SentinelState) -> SentinelState:
+    """ Simulate CRAFT schema discovery (tables GITHUB_REPOS, DEPS_DEV_V1)."""
     state["reasoning_trace"].append("Discovering enterprise schema via CRAFT...")
     state["discovered_schema"] = {
         "tables": ["GITHUB_REPOS", "DEPS_DEV_V1"],
@@ -15,6 +18,8 @@ def discover_schema_node(state: SentinelState) -> SentinelState:
     return state
 
 def investigate_dependencies_node(state: SentinelState) -> SentinelState:
+    """ Mock dependency graph scan returning 147 repos, 89 direct, 58
+    transitive, 23 paths."""
     state["reasoning_trace"].append("Investigating dependency graph...")
     state["affected_repositories"] = [{"repo": f"repo_{i}", "dependency": state["package_name"]} for i in range(147)]
     state["dependency_paths"] = [{"from": state["package_name"], "to": f"repo_{i}"} for i in range(23)]
@@ -24,6 +29,7 @@ def investigate_dependencies_node(state: SentinelState) -> SentinelState:
     return state
 
 def assess_blast_radius_node(state: SentinelState) -> SentinelState:
+    """ Calculate blast radius and evidence confidence from dependency data."""
     state["reasoning_trace"].append("Calculating blast radius...")
     evidence = build_evidence_from_investigation(
         incident_id=state["incident_id"],
@@ -44,6 +50,7 @@ def assess_blast_radius_node(state: SentinelState) -> SentinelState:
     return state
 
 def propose_remediation_node(state: SentinelState) -> SentinelState:
+    """ Generate a Nemotron remediation proposal (mock)."""
     state["reasoning_trace"].append("Nemotron reasoning over evidence...")
     proposal = RemediationProposal(
         action_type="upgrade",
@@ -58,6 +65,7 @@ def propose_remediation_node(state: SentinelState) -> SentinelState:
     return state
 
 def arf_governance_node(state: SentinelState) -> SentinelState:
+    """ Evaluate the proposal through the ARFGovernanceAdapter."""
     state["reasoning_trace"].append("Submitting to ARF governance...")
     evidence = IncidentEvidence(
         incident_id=state["incident_id"],
@@ -79,5 +87,6 @@ def arf_governance_node(state: SentinelState) -> SentinelState:
     return state
 
 def prepare_execution_boundary_node(state: SentinelState) -> SentinelState:
+    """ Placeholder node that marks the execution boundary ready."""
     state["reasoning_trace"].append("Preparing execution boundary...")
     return state
