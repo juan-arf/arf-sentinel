@@ -259,6 +259,31 @@ elif st.session_state.phase == 1:
     progress_bar.empty()
     status_text.empty()
 
+    # Ensure state exists (auto‑play may have skipped manual init)
+    if st.session_state.state is None:
+        # Create a minimal state with the mock investigation data
+        st.session_state.state = SentinelState(
+            incident_id=f"incident_{int(time.time())}",
+            package_name="urllib3",
+            vulnerability_description="CVE-2025-1234 - Remote code execution in urllib3 < 2.0.1",
+            discovered_schema={},
+            affected_repositories=[],
+            dependency_paths=[],
+            direct_dependency_count=0,
+            transitive_dependency_count=0,
+            affected_repository_count=0,
+            evidence_confidence=0.0,
+            blast_radius_score=0.0,
+            investigation_summary="",
+            proposed_action={},
+            arf_event={},
+            arf_decision={},
+            execution_status="",
+            sql_queries=[],
+            reasoning_trace=[],
+            errors=[]
+        )
+
     state = st.session_state.state
     state["affected_repositories"] = [{"repo": f"repo_{i}", "dependency": "urllib3"} for i in range(147)]
     state["dependency_paths"] = [{"from": "urllib3", "to": f"repo_{i}"} for i in range(23)]
