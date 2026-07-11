@@ -196,4 +196,4 @@ def generate_audit_pdf(
         "they become real-world changes."
     )
 
-    return pdf.output()
+    return bytes(pdf.output())
