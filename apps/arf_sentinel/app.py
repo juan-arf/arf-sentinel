@@ -79,7 +79,6 @@ def render_bayesian_explanation(prior_risk, evidence_conf, posterior_risk):
 
 # ── Phase 0: Mission Control (animated workflow SVG) ──
 if st.session_state.phase == 0:
-    # Animated workflow SVG (cyberpunk aesthetic)
     st.components.v1.html("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
@@ -97,10 +96,8 @@ if st.session_state.phase == 0:
                 <polygon points="0 0, 8 3, 0 6" fill="#e0e0e0" />
             </marker>
         </defs>
-        <!-- Incident icon -->
         <circle cx="30" cy="130" r="10" fill="#e74c3c" />
         <text x="30" y="134" text-anchor="middle" class="node" font-size="12">!</text>
-        <!-- Nodes -->
         <rect x="20" y="100" width="100" height="60" rx="8" fill="#1e1e1e" stroke="#00bcd4" stroke-width="2" class="glow"/>
         <text x="70" y="135" text-anchor="middle" class="node" fill="#00bcd4">CRAFT</text>
         <rect x="220" y="100" width="120" height="60" rx="8" fill="#1e1e1e" stroke="#9b59b6" stroke-width="2" class="glow"/>
@@ -109,11 +106,9 @@ if st.session_state.phase == 0:
         <text x="490" y="135" text-anchor="middle" class="node" fill="#00FF88">ARF</text>
         <rect x="640" y="100" width="130" height="60" rx="8" fill="#1e1e1e" stroke="#e74c3c" stroke-width="2" class="glow"/>
         <text x="705" y="135" text-anchor="middle" class="node" fill="#e74c3c">EXECUTION</text>
-        <!-- Animated arrows -->
         <line x1="120" y1="130" x2="210" y2="130" class="edge flow" stroke="#00bcd4" marker-end="url(#arrow)"/>
         <line x1="340" y1="130" x2="430" y2="130" class="edge flow" stroke="#9b59b6" marker-end="url(#arrow)"/>
         <line x1="540" y1="130" x2="630" y2="130" class="edge flow" stroke="#00FF88" marker-end="url(#arrow)"/>
-        <!-- Labels -->
         <text x="165" y="95" text-anchor="middle" class="node" font-size="10" fill="#888">Enterprise Evidence</text>
         <text x="385" y="95" text-anchor="middle" class="node" font-size="10" fill="#888">Remediation Proposal</text>
         <text x="585" y="95" text-anchor="middle" class="node" font-size="10" fill="#888">Governance Decision</text>
